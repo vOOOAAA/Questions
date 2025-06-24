@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .add-todo {
+            display: flex;
+            margin-bottom: 30px;
+        }
+        #todoInput {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px 0 0 4px;
+            font-size: 16px;
+        }
+        #addBtn {
+            padding: 12px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #addBtn:hover {
+            background-color: #218838;
+        }
+        .todo-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .todo-item.completed {
+            opacity: 0.6;
+            text-decoration: line-through;
+        }
+        .todo-text {
+            flex: 1;
+            margin: 0 15px;
+            font-size: 16px;
+        }
+        .todo-checkbox {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .no-todos {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 30px;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Todo List</h1>
+        
+        <div class="add-todo">
+            <input type="text" id="todoInput" placeholder="Enter a new todo..." maxlength="100">
+            <button id="addBtn">Add Todo</button>
+        </div>
+        
+        <div id="error" class="error"></div>
+        
+        <div id="todoList">
+            <div class="no-todos">No todos yet. Add one above!</div>
+        </div>
+    </div>
+
+    <script>
+        let todos = [];
+        
+        // Load todos on page load
+        document.addEventListener('DOMContentLoaded', loadTodos);
+        
+        // Add event listeners
+        document.getElementById('addBtn').addEventListener('click', addTodo);
+        document.getElementById('todoInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addTodo();
+            }
+        });
+        
+        async function loadTodos() {
+            try {
+                const response = await fetch('/api/todos');
+                if (response.ok) {
+                    todos = await response.json();
+                    renderTodos();
+                } else {
+                    showError('Failed to load todos');
+                }
+            } catch (error) {
+                showError('Network error. Please check if your server is running on port 3000.');
+            }
+        }
+        
+        async function addTodo() {
+            const input = document.getElementById('todoInput');
+            const text = input.value.trim();
+            
+            if (!text) return;
+            
+            try {
+                const response = await fetch('/api/todos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text })
+                });
+                
+                if (response.ok) {
+                    const newTodo = await response.json();
+                    todos.push(newTodo);
+                    input.value = '';
+                    renderTodos();
+                    clearError();
+                } else {
+                    showError('Failed to add todo');
+                }
+            } catch (error) {
+                showError('Network error');
+            }
+        }
+        
+        async function toggleTodo(id) {
+            const todo = todos.find(t => t.id === id);
+            if (!todo) return;
+            
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ completed: !todo.completed })
+                });
+                
+                if (response.ok) {
+                    todo.completed = !todo.completed;
+                    renderTodos();
+                    clearError();
+                } else {
+                    showError('Failed to update todo');
+                }
+            } catch (error) {
+                showError('Network error');
+            }
+        }
+        
+        async function deleteTodo(id) {
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    todos = todos.filter(t => t.id !== id);
+                    renderTodos();
+                    clearError();
+                } else {
+                    showError('Failed to delete todo');
+                }
+            } catch (error) {
+                showError('Network error');
+            }
+        }
+        
+        function renderTodos() {
+            const todoList = document.getElementById('todoList');
+            
+            if (todos.length === 0) {
+                todoList.innerHTML = '<div class="no-todos">No todos yet. Add one above!</div>';
+                return;
+            }
+            
+            todoList.innerHTML = todos.map(todo => `
+                <div class="todo-item ${todo.completed ? 'completed' : ''}">
+                    <input type="checkbox" class="todo-checkbox" 
+                           ${todo.completed ? 'checked' : ''} 
+                           onchange="toggleTodo(${todo.id})">
+                    <span class="todo-text">${escapeHtml(todo.text)}</span>
+                    <button class="delete-btn" onclick="deleteTodo(${todo.id})">Delete</button>
+                </div>
+            `).join('');
+        }
+        
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+        }
+        
+        function clearError() {
+            document.getElementById('error').textContent = '';
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
